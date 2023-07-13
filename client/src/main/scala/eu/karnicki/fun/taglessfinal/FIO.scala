@@ -9,4 +9,3 @@ class FIO[A](val unsafeInterpret: () => A):
     flatMap(fun.andThen(FIO.effect))
   def flatMap[B](fun: A => FIO[B]): FIO[B] =
     FIO.effect(fun(unsafeInterpret())).unsafeInterpret()
-
