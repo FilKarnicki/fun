@@ -2,8 +2,18 @@ package eu.karnicki.fun.taglessfinal
 
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers.shouldBe
 
 class FIOTest extends AnyFlatSpecLike:
   behavior of "FIO"
-  it should "succeed in a simplest test" in:
-    assert("Scala".toLowerCase == "scala")
+  it should "flatMap" in :
+    FIO.effect(42)
+      .flatMap(a =>
+        FIO.effect(s"the meaning of life is $a"))
+      .unsafeInterpret.apply shouldBe "the meaning of life is 42"
+
+  it should "map" in :
+    FIO.effect(42)
+      .map(a =>
+        s"the meaning of life is $a")
+      .unsafeInterpret.apply shouldBe "the meaning of life is 42"
