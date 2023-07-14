@@ -38,9 +38,10 @@ val root = (project in file("."))
   .configs(IntegrationTest)
   .settings(
     libraryDependencies ++= Seq(
-      "com.dimafeng" %% "testcontainers-scala-scalatest" % testcontainersVersion % "it",
-      scalatest),
+      "com.dimafeng"  %% "testcontainers-scala-scalatest" % testcontainersVersion % "it",
+      "org.scalatest" %% "scalatest"                      % scalatestVersion      % "it"),
     Defaults.itSettings,
-    IntegrationTest / fork := true)
+    IntegrationTest / fork := true,
+    IntegrationTest / parallelExecution := false)
   .aggregate(core, server, client)
 
