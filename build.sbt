@@ -22,17 +22,16 @@ val core = (project in file("core")).settings(
 val server = (project in file("server"))
   .settings(
     assembly / mainClass := Some("eu.karnicki.ServerApp"),
-    libraryDependencies ++= clientServerLibraries)
-  .dependsOn(core)
-val client = (project in file("client"))
-  .settings(
-    assembly / mainClass := Some("eu.karnicki.ClientApp"),
-    libraryDependencies ++= (clientServerLibraries ++
+    libraryDependencies ++= clientServerLibraries  ++
       Seq(
         "http4s-ember-server",
         "http4s-circe",
         "http4s-dsl")
-        .map(artifact => "org.http4s" %% artifact % http4sVersion)))
+        .map(artifact => "org.http4s" %% artifact % http4sVersion))
+  .dependsOn(core)
+val client = (project in file("client"))
+  .settings(
+    assembly / mainClass := Some("eu.karnicki.ClientApp"))
   .dependsOn(server)
 val root = (project in file("."))
   .configs(IntegrationTest)
