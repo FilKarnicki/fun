@@ -1,4 +1,4 @@
-package eu.karnicki.fun.taglessfinal
+package eu.karnicki.fun
 
 object FIO:
   def effect[A](a: A): FIO[A] =

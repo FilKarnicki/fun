@@ -1,5 +1,6 @@
-package eu.karnicki.fun.taglessfinal
+package eu.karnicki.fun
 
+import eu.karnicki.fun.FIO
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.matchers.should.Matchers.shouldBe
