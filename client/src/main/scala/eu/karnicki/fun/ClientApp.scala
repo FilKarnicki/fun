@@ -1,5 +1,7 @@
 package eu.karnicki.fun
 
+import eu.karnicki.fun.http.CounterpartyService.CounterpartyServiceLive
+import eu.karnicki.fun.http.{CounterpartyService, CounterpartyServiceConfig}
 import io.circe.Decoder
 import zio.*
 import zio.http.netty.NettyConfig
@@ -22,14 +24,22 @@ object ClientApp extends ZIOAppDefault:
       .map(event =>
         (event, event.anonymizedBuyer, event.anonymizedSeller))
 
+  private val counterpartyService: CounterpartyService =
+    CounterpartyServiceLive(
+      CounterpartyServiceConfig(
+        url = "http://localhost:8080/deanonymize/",
+        retryStrategy = Schedule.recurs(5) && Schedule.spaced(100 millis) && Schedule.recurWhile(_ == Errors.Transient)))
+
+  // TODO: config with zlayers
   private val effects = for {
     eventsWithFibers <- ZIO.collectAll(
       eventHashTuples.map((event, buyer, seller) =>
-        ZIO.succeed(event).zip(ZIO.collectAll(
-          Seq(
-            Client.request(s"http://localhost:8080/deanonymize/$buyer").fork,
-            Client.request(s"http://localhost:8080/deanonymize/$seller").fork)))))
-    
+        ZIO.succeed(event).zip(
+          ZIO.collectAll(
+            Seq(
+              counterpartyService.deanonymize(buyer).fork,
+              counterpartyService.deanonymize(seller).fork)))))
+
     eventsAndResolved <- ZIO.collectAll(
       eventsWithFibers.map((event, fiberSeq) =>
         ZIO.succeed(event).zip(ZIO.collectAll(fiberSeq.map(_.join.flatMap(_.body.asString))))))
