@@ -14,16 +14,25 @@ import scala.language.postfixOps
 case class CounterpartyServiceConfig(url: String,
                                      retryStrategy: Schedule[ZClient[Any, Body, Throwable, Response], ServiceCallError, Any])
 
-//val counterpartyServiceConfigZLayer = ZLayer.succeed(CounterpartyServiceConfig("http://localhost:8080/deanonymize/"))
-//val poop: WithState[((Long, Long), Unit), Any, Nothing, (Long, Long)] = Schedule.recurs(5) && Schedule.spaced(100 millis) && Schedule.recurWhile(_ == Errors.Transient)
+object CounterpartyServiceConfig:
+  lazy val live: ULayer[CounterpartyServiceConfig] =
+    ZLayer.succeed(CounterpartyServiceConfig(
+      url = "http://localhost:8080/deanonymize/",
+      retryStrategy = Schedule.recurs(5) && Schedule.spaced(100 millis) && Schedule.recurWhile(_ == Errors.Transient)))
+
 trait CounterpartyService:
   def deanonymize[T](anonymizedCounterpartyId: CounterpartyHash): ZIO[Client, ServiceCallError, Response]
 
 object CounterpartyService:
-  lazy val live: ZLayer[Client, Throwable, Response] = ???
+  lazy val live: ZLayer[CounterpartyServiceConfig, Throwable, CounterpartyService] =
+    ZLayer {
+      for {
+        counterpartyServiceConfig <- ZIO.service[CounterpartyServiceConfig]
+      } yield CounterpartyServiceLive(counterpartyServiceConfig)
+    }
 
   final case class CounterpartyServiceLive(counterpartyServiceConfig: CounterpartyServiceConfig) extends CounterpartyService:
-    override def deanonymize[T](anonymizedCounterpartyId: CounterpartyHash) =
+    override def deanonymize[T](anonymizedCounterpartyId: CounterpartyHash): ZIO[Client, ServiceCallError, Response] =
       Client.request(s"${counterpartyServiceConfig.url}$anonymizedCounterpartyId")
         .catchAllTrace {
           case (throwable: ConnectException, trace: StackTrace) =>

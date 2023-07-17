@@ -24,31 +24,35 @@ object ClientApp extends ZIOAppDefault:
       .map(event =>
         (event, event.anonymizedBuyer, event.anonymizedSeller))
 
-  private val counterpartyService: CounterpartyService =
-    CounterpartyServiceLive(
-      CounterpartyServiceConfig(
-        url = "http://localhost:8080/deanonymize/",
-        retryStrategy = Schedule.recurs(5) && Schedule.spaced(100 millis) && Schedule.recurWhile(_ == Errors.Transient)))
+  private val effects = ZIO.scoped {
+    for {
+      counterpartyService <- ZIO.service[CounterpartyService]
+      eventsWithFibers <- ZIO.collectAll(
+        eventHashTuples.map((event, buyer, seller) =>
+          ZIO.succeed(event).zip(
+            ZIO.collectAll(
+              Seq(
+                counterpartyService.deanonymize(buyer).fork,
+                counterpartyService.deanonymize(seller).fork)))))
 
-  // TODO: config with zlayers
-  private val effects = for {
-    eventsWithFibers <- ZIO.collectAll(
-      eventHashTuples.map((event, buyer, seller) =>
-        ZIO.succeed(event).zip(
-          ZIO.collectAll(
-            Seq(
-              counterpartyService.deanonymize(buyer).fork,
-              counterpartyService.deanonymize(seller).fork)))))
+      eventsAndResolved <- ZIO.collectAll(
+        eventsWithFibers.map((event, fiberSeq) =>
+          ZIO.succeed(event)
+            .zip(ZIO.collectAll(
+              fiberSeq.map(_.join.flatMap(_.body.asString))))))
 
-    eventsAndResolved <- ZIO.collectAll(
-      eventsWithFibers.map((event, fiberSeq) =>
-        ZIO.succeed(event).zip(ZIO.collectAll(fiberSeq.map(_.join.flatMap(_.body.asString))))))
-
-    enrichedEvents = eventsAndResolved.map {
-      case (event, resolvedBuyer +: resolvedSeller +: _) =>
-        EnrichedEvent(event, resolvedBuyer, resolvedSeller)
-    }
-  } yield enrichedEvents
+      enrichedEvents = eventsAndResolved.map {
+        case (event, resolvedBuyer +: resolvedSeller +: _) =>
+          EnrichedEvent(event, resolvedBuyer, resolvedSeller)
+      }
+    } yield enrichedEvents
+  }
 
   override def run: URIO[Any, ExitCode] =
-    effects.debug.provide(Client.default).exitCode
+    effects
+      .debug
+      .provide(
+        Client.default,
+        CounterpartyServiceConfig.live,
+        CounterpartyService.live)
+      .exitCode
