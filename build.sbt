@@ -14,6 +14,7 @@ val scalatest = "org.scalatest" %% "scalatest" % scalatestVersion % Test
 val clientServerLibraries = Seq(
   scalatest +:
     ("dev.zio" %% "zio-http" % zioHttpVersion) +:
+    ("dev.zio" %% "zio-http-testkit" % zioHttpVersion % Test) +:
     Seq(
       "circe-core",
       "circe-generic")
@@ -37,7 +38,13 @@ val server = (project in file("server"))
   .dependsOn(core)
 val client = (project in file("client"))
   .settings(
-    assembly / mainClass := Some("eu.karnicki.ClientApp"))
+    assembly / mainClass := Some("eu.karnicki.ClientApp"),
+    libraryDependencies ++=
+      clientServerLibraries ++
+        Seq(
+          "zio-test", "zio-test-sbt", "zio-test-magnolia")
+          .map(artifact => "dev.zio" %% artifact % zioVersion % Test),
+    testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"))
   .dependsOn(server)
 val root = (project in file("."))
   .configs(IntegrationTest)
