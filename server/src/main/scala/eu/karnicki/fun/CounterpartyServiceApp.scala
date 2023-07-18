@@ -3,7 +3,7 @@ package eu.karnicki.fun
 import cats.*
 import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits.*
-import com.comcast.ip4s.{ipv4, port}
+import com.comcast.ip4s.{Port, ipv4, port}
 import io.circe.generic.auto.*
 import io.circe.syntax.*
 import org.http4s.*
@@ -57,10 +57,14 @@ object CounterpartyServiceApp extends IOApp:
     allRoutes[F].orNotFound
 
   override def run(args: List[String]): IO[ExitCode] =
+    val port = args.headOption
+      .flatMap(head => scala.util.Try(head.toInt).toOption)
+      .flatMap(Port.fromInt).getOrElse(Port.fromInt(8080).get)
+
     EmberServerBuilder
       .default[IO]
       .withHost(ipv4"0.0.0.0")
-      .withPort(port"8080")
+      .withPort(port)
       .withHttpApp(allRoutesComplete)
       .build
       .use(_ => IO.never)

@@ -24,7 +24,7 @@ object ClientApp extends ZIOAppDefault:
       .map(event =>
         (event, event.anonymizedBuyer, event.anonymizedSeller))
 
-  private val effects = ZIO.scoped {
+  val effects = ZIO.scoped {
     for {
       counterpartyService <- ZIO.service[CounterpartyService]
       eventsWithFibers <- ZIO.collectAll(

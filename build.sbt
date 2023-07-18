@@ -10,6 +10,15 @@ val testcontainersVersion = "0.40.17"
 val zioVersion = "2.0.15"
 val zioHttpVersion = "3.0.0-RC2"
 
+enablePlugins(
+  JavaAppPackaging
+)
+//ThisBuild / assemblyMergeStrategy := {
+//  case PathList("META-INF", "MANIFEST.MF") => MergeStrategy.discard
+//  case "META-INF/io.netty.versions.properties" => MergeStrategy.first
+//  case x => MergeStrategy.first
+//}
+
 val scalatest = "org.scalatest" %% "scalatest" % scalatestVersion % Test
 val clientServerLibraries = Seq(
   scalatest +:
@@ -27,7 +36,11 @@ val core = (project in file("core")).settings(
 )
 val server = (project in file("server"))
   .settings(
-    assembly / mainClass := Some("eu.karnicki.ServerApp"),
+    Compile / mainClass := Some("eu.karnicki.fun.CounterpartyServiceApp"),
+    Docker / packageName := "local/fun",
+    dockerBaseImage := "openjdk:17",
+    dockerExposedVolumes := Seq("/opt/docker/.logs", "/opt/docker/.keys"),
+    dockerExposedPorts ++= Seq(8080, 8081),
     libraryDependencies ++= clientServerLibraries ++
       Seq(
         "http4s-ember-server",
@@ -35,10 +48,11 @@ val server = (project in file("server"))
         "http4s-circe",
         "http4s-dsl")
         .map(artifact => "org.http4s" %% artifact % http4sVersion))
+  .enablePlugins(JavaAppPackaging, DockerPlugin)
   .dependsOn(core)
 val client = (project in file("client"))
   .settings(
-    assembly / mainClass := Some("eu.karnicki.ClientApp"),
+    Compile / mainClass := Some("eu.karnicki.ClientApp"),
     libraryDependencies ++=
       clientServerLibraries ++
         Seq(
@@ -51,9 +65,11 @@ val root = (project in file("."))
   .settings(
     libraryDependencies ++= Seq(
       "com.dimafeng" %% "testcontainers-scala-scalatest" % testcontainersVersion % "it",
-      "org.scalatest" %% "scalatest" % scalatestVersion % "it"),
+      "org.scalatest" %% "scalatest" % scalatestVersion % "it",
+    ),
     Defaults.itSettings,
     IntegrationTest / fork := true,
     IntegrationTest / parallelExecution := false)
   .aggregate(core, server, client)
+  .dependsOn(client)
 
