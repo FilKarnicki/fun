@@ -21,19 +21,20 @@ object CounterpartyServiceConfig:
       retryStrategy = Schedule.recurs(5) && Schedule.spaced(100 millis) && Schedule.recurWhile(_ == Errors.Transient)))
 
 trait CounterpartyService:
-  def deanonymize[T](anonymizedCounterpartyId: CounterpartyHash): ZIO[Client, ServiceCallError, Response]
+  def deanonymize[T](anonymizedCounterpartyId: CounterpartyHash): zio.ZIO[zio.http.Client, Throwable, String]
 
 object CounterpartyService:
   lazy val live: ZLayer[CounterpartyServiceConfig, Throwable, CounterpartyService] =
-    ZLayer {
+    ZLayer.scoped {
       for {
         counterpartyServiceConfig <- ZIO.service[CounterpartyServiceConfig]
       } yield CounterpartyServiceLive(counterpartyServiceConfig)
     }
 
   final case class CounterpartyServiceLive(counterpartyServiceConfig: CounterpartyServiceConfig) extends CounterpartyService:
-    override def deanonymize[T](anonymizedCounterpartyId: CounterpartyHash): ZIO[Client, ServiceCallError, Response] =
-      Client.request(s"${counterpartyServiceConfig.url}$anonymizedCounterpartyId")
+    override def deanonymize[T](anonymizedCounterpartyId: CounterpartyHash): zio.ZIO[Client, Throwable, String] =
+      Client
+        .request(s"${counterpartyServiceConfig.url}$anonymizedCounterpartyId")
         .catchAllTrace {
           case (throwable: ConnectException, trace: StackTrace) =>
             ZIO.logError(s"Transient connection error while deanonymising: ${(throwable, trace).toErrorMessage}") *> ZIO.fail(Errors.Transient)
@@ -41,3 +42,4 @@ object CounterpartyService:
             ZIO.logError(s"Error while deanonymising: ${(throwable, trace).toErrorMessage}") *> ZIO.fail(Errors.ResponseError("unknown"))
         }
         .retry(counterpartyServiceConfig.retryStrategy)
+        .flatMap(response => response.body.asString)

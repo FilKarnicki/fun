@@ -39,7 +39,7 @@ object ClientApp extends ZIOAppDefault:
         eventsWithFibers.map((event, fiberSeq) =>
           ZIO.succeed(event)
             .zip(ZIO.collectAll(
-              fiberSeq.map(_.join.flatMap(_.body.asString))))))
+              fiberSeq.map(_.join)))))
 
       enrichedEvents = eventsAndResolved.map {
         case (event, resolvedBuyer +: resolvedSeller +: _) =>
