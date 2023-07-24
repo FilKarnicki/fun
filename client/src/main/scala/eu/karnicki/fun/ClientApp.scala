@@ -17,7 +17,7 @@ object ClientApp extends ZIOAppDefault:
       notional = 1_000_000,
       anonymizedBuyer = "a",
       anonymizedSeller = "b"),
-    Event("t1", 800_000, "b", "a"))
+    Event("t1", 800_000, "b", "z"))
 
   private val eventHashTuples =
     events

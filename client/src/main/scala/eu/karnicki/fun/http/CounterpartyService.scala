@@ -21,7 +21,7 @@ object CounterpartyServiceConfig:
       retryStrategy = Schedule.recurs(5) && Schedule.spaced(100 millis) && Schedule.recurWhile(_ == Errors.Transient)))
 
 trait CounterpartyService:
-  def deanonymize[T](anonymizedCounterpartyId: CounterpartyHash): zio.ZIO[zio.http.Client, Throwable, String]
+  def deanonymize[T](anonymizedCounterpartyId: CounterpartyHash): zio.ZIO[zio.http.Client, ServiceCallError, String]
 
 object CounterpartyService:
   lazy val live: ZLayer[CounterpartyServiceConfig, Throwable, CounterpartyService] =
@@ -32,14 +32,15 @@ object CounterpartyService:
     }
 
   final case class CounterpartyServiceLive(counterpartyServiceConfig: CounterpartyServiceConfig) extends CounterpartyService:
-    override def deanonymize[T](anonymizedCounterpartyId: CounterpartyHash): zio.ZIO[Client, Throwable, String] =
-      Client
-        .request(s"${counterpartyServiceConfig.url}$anonymizedCounterpartyId")
-        .catchAllTrace {
-          case (throwable: ConnectException, trace: StackTrace) =>
-            ZIO.logError(s"Transient connection error while deanonymising: ${(throwable, trace).toErrorMessage}") *> ZIO.fail(Errors.Transient)
-          case (throwable, trace) =>
-            ZIO.logError(s"Error while deanonymising: ${(throwable, trace).toErrorMessage}") *> ZIO.fail(Errors.ResponseError("unknown"))
-        }
+    override def deanonymize[T](anonymizedCounterpartyId: CounterpartyHash): ZIO[Client, ServiceCallError, String] =
+      Client.request(s"${counterpartyServiceConfig.url}$anonymizedCounterpartyId")
+        .foldZIO({
+          case throwable: ConnectException =>
+            ZIO.logError(
+              s"Transient connection error while deanonymizing: ${throwable.getMessage}") *> ZIO.fail(Errors.Transient)
+          case throwable =>
+            ZIO.logError(
+              s"Error while deanonymizing: ${throwable.getMessage}") *> ZIO.fail(Errors.ResponseError(throwable.getMessage))
+        }, successfulResponse =>
+          successfulResponse.body.asString.orDie)
         .retry(counterpartyServiceConfig.retryStrategy)
-        .flatMap(response => response.body.asString)

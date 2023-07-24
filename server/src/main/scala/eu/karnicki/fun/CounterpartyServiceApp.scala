@@ -42,11 +42,6 @@ object CounterpartyServiceApp extends IOApp:
     val dsl = Http4sDsl[F]
     import dsl.*
 
-    val stringValidation = new EitherMonad[IllegalArgumentException]
-    val what = stringValidation.unit("someHash")
-      .map(h => !h.isBlank)
-      .map(isBlank => !isBlank)
-
     HttpRoutes.of[F] {
       case GET -> Root / "deanonymize" / counterpartyHash =>
         counterpartyStore.get(counterpartyHash) match
