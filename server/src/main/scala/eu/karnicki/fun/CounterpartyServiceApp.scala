@@ -4,6 +4,7 @@ import cats.*
 import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits.*
 import com.comcast.ip4s.{Port, ipv4, port}
+import eu.karnicki.fun.KindsAndTypeLambdas.EitherMonad
 import io.circe.generic.auto.*
 import io.circe.syntax.*
 import org.http4s.*
@@ -14,7 +15,9 @@ import org.http4s.ember.server.EmberServerBuilder
 import org.http4s.headers.*
 import org.http4s.implicits.*
 import org.http4s.server.*
+import zio.schema.validation.Validation
 
+import scala.util.{Failure, Success, Try}
 
 object CounterpartyServiceApp extends IOApp:
   private val counterpartyStore: Map[String, String] =
@@ -38,6 +41,11 @@ object CounterpartyServiceApp extends IOApp:
   def counterpartyRoutes[F[_] : Monad]: HttpRoutes[F] =
     val dsl = Http4sDsl[F]
     import dsl.*
+
+    val stringValidation = new EitherMonad[IllegalArgumentException]
+    val what = stringValidation.unit("someHash")
+      .map(h => !h.isBlank)
+      .map(isBlank => !isBlank)
 
     HttpRoutes.of[F] {
       case GET -> Root / "deanonymize" / counterpartyHash =>

@@ -6,23 +6,15 @@ import zio.http.*
 import zio.test.*
 
 object CounterpartyServiceTest extends ZIOSpecDefault:
-  private val testConfig = CounterpartyServiceConfig("http://localhost/deanonymise/", Schedule.recurs(0))
-  private val testService = CounterpartyServiceLive(testConfig)
-
-  /* Unsure how to use this yet
   private lazy val configZLayer: ULayer[CounterpartyServiceConfig] =
-    ZLayer.succeed(testConfig)
+    ZLayer.succeed(CounterpartyServiceConfig("http://localhost/deanonymise/", Schedule.recurs(0)))
 
-  private lazy val liveServiceZLayer: ZLayer[CounterpartyServiceConfig, Nothing, CounterpartyService] =
-    ZLayer.scoped {
-      for {
-        counterpartyServiceConfig <- ZIO.service[CounterpartyServiceConfig]
-      } yield CounterpartyServiceLive(counterpartyServiceConfig)
-    }
+  private lazy val testServiceLayer: ZLayer[CounterpartyServiceConfig, Nothing, CounterpartyService] = ZLayer.scoped {
+    for {
+      testConfig <- ZIO.service[CounterpartyServiceConfig]
+    } yield CounterpartyServiceLive(testConfig)
+  }
 
-  private lazy val what: ZLayer[Any, Nothing, CounterpartyService] =
-    ZLayer.succeed(testService)
-  */
   override def spec =
     suite("CounterpartyServiceSpec")(
       test("it should do something"):
@@ -35,13 +27,15 @@ object CounterpartyServiceTest extends ZIOSpecDefault:
           _ <- TestClient.addRequestResponse(request2, Response(status = Status.NotFound, body = Body.fromString("z")))
           goodResponse <- client.request(request)
           badResponse <- client.request(request2)
-          
-          //counterpartyService <- ZIO.service[CounterpartyService]
-          responseA <- testService.deanonymize("a")
-          responseZ <- testService.deanonymize("z")
+
+          counterpartyService <- ZIO.service[CounterpartyService]
+          responseA <- counterpartyService.deanonymize("a")
+          responseZ <- counterpartyService.deanonymize("z")
         } yield assertTrue(goodResponse.status == Status.Ok) &&
           assertTrue(badResponse.status == Status.NotFound) &&
           assertTrue(responseA == "A") &&
           assertTrue(responseZ == "z")
     )
-      .provideLayer(TestClient.layer)
+      .provide(TestClient.layer,
+        configZLayer,
+        testServiceLayer)
