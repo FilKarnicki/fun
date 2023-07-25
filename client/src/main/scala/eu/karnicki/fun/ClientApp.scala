@@ -17,7 +17,7 @@ object ClientApp extends ZIOAppDefault:
       notional = 1_000_000,
       anonymizedBuyer = "a",
       anonymizedSeller = "b"),
-    Event("t1", 800_000, "b", "a"))
+    Event("t1", 800_000, "B", "A"))
 
   private val eventHashTuples =
     events
@@ -32,12 +32,17 @@ object ClientApp extends ZIOAppDefault:
       counterpartyService <- ZIO.service[CounterpartyService]
       eventsAndResolved <- ZIO.collectAll(
         eventHashTuples.map((event, buyer, seller) =>
-          ZIO.succeed(event).zip(
-            ZIO.collectAll(
-              Seq(
-                counterpartyService.deanonymize(buyer).fork,
-                counterpartyService.deanonymize(seller).fork))
-              .flatMap(joinAllFibers))))
+          ZIO.succeed(event)
+            .zip(
+              ZIO.collectAll(
+                Seq(
+                  counterpartyService.deanonymize(buyer)
+                    .orElse(counterpartyService.deanonymize(buyer.toLowerCase))
+                    .fork,
+                  counterpartyService.deanonymize(seller)
+                    .orElse(counterpartyService.deanonymize(seller.toLowerCase))
+                    .fork))
+                .flatMap(joinAllFibers))))
 
       enrichedEvents = eventsAndResolved.map {
         case (event, resolvedBuyer +: resolvedSeller +: _) =>

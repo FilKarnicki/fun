@@ -6,7 +6,7 @@ import io.circe.Decoder
 import io.netty.channel.{AbstractChannel, ChannelException}
 import zio.*
 import zio.Schedule.WithState
-import zio.http.{Body, Client, Response, ZClient}
+import zio.http.{Body, Client, Response, Status, ZClient}
 
 import java.net.ConnectException
 import scala.language.postfixOps
@@ -37,6 +37,13 @@ object CounterpartyService:
           case throwable =>
             ZIO.logError(
               s"Error while deanonymizing: ${throwable.getMessage}") *> ZIO.fail(Errors.ResponseError(throwable.getMessage))
-        }, successfulResponse =>
-          successfulResponse.body.asString.orDie)
+        }, successfulResponse => {
+          successfulResponse.status match
+            case Status.NotFound =>
+              ZIO.fail(Errors.NotFound)
+            case Status.Ok =>
+              successfulResponse.body.asString.orDie
+            case status =>
+              ZIO.fail(Errors.ResponseError(status.text))
+        })
         .retry(counterpartyServiceConfig.retryStrategy)

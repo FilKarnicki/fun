@@ -6,6 +6,7 @@ object Errors:
   sealed trait ServiceCallError extends Throwable
   
   case object Transient extends ServiceCallError
+  case object NotFound extends ServiceCallError
   case class ResponseError(code: String) extends ServiceCallError
 
   extension (s: (Throwable, StackTrace))
