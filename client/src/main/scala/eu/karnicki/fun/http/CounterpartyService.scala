@@ -24,12 +24,8 @@ trait CounterpartyService:
   def deanonymize[T](anonymizedCounterpartyId: CounterpartyHash): zio.ZIO[zio.http.Client, ServiceCallError, String]
 
 object CounterpartyService:
-  lazy val live: ZLayer[CounterpartyServiceConfig, Throwable, CounterpartyService] =
-    ZLayer.scoped {
-      for {
-        counterpartyServiceConfig <- ZIO.service[CounterpartyServiceConfig]
-      } yield CounterpartyServiceLive(counterpartyServiceConfig)
-    }
+  def create(config: CounterpartyServiceConfig): CounterpartyService = CounterpartyServiceLive(config)
+  val live: ZLayer[CounterpartyServiceConfig, Nothing, CounterpartyService] = ZLayer.fromFunction(create)
 
   final case class CounterpartyServiceLive(counterpartyServiceConfig: CounterpartyServiceConfig) extends CounterpartyService:
     override def deanonymize[T](anonymizedCounterpartyId: CounterpartyHash): ZIO[Client, ServiceCallError, String] =

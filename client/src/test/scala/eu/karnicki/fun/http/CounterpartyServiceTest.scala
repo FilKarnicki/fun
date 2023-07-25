@@ -42,7 +42,7 @@ object CounterpartyServiceTest extends ZIOSpecDefault:
           responseA <- counterpartyService.deanonymize("a")
           responseZ <- counterpartyService.deanonymize("z").exit
         } yield assertTrue(responseA == "A") &&
-          assert(responseZ)(fails(equalTo(new ConnectException("oh noes")))) // && TODO: assert
+          assert(responseZ)(fails(equalTo(Transient))) // && TODO: assert
 
 
     )

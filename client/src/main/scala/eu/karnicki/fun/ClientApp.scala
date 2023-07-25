@@ -17,14 +17,14 @@ object ClientApp extends ZIOAppDefault:
       notional = 1_000_000,
       anonymizedBuyer = "a",
       anonymizedSeller = "b"),
-    Event("t1", 800_000, "b", "z"))
+    Event("t1", 800_000, "b", "a"))
 
   private val eventHashTuples =
     events
       .map(event =>
         (event, event.anonymizedBuyer, event.anonymizedSeller))
 
-  private def joinAllFibers(fibers: Seq[Fiber[Throwable, String]]) =
+  def joinAllFibers(fibers: Seq[Fiber[Throwable, String]]) =
     ZIO.collectAll(fibers.map(fiber => fiber.join))
 
   private val effects = ZIO.scoped {
@@ -47,10 +47,13 @@ object ClientApp extends ZIOAppDefault:
   }
 
   override def run: URIO[Any, ExitCode] =
-    effects
+    val auto = effects
       .debug
       .provide(
         Client.default,
+        CounterpartyService.live,
         CounterpartyServiceConfig.live,
-        CounterpartyService.live)
+        ZLayer.Debug.mermaid)
       .exitCode
+
+    auto
