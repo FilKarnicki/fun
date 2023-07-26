@@ -24,9 +24,6 @@ object ClientApp extends ZIOAppDefault:
       .map(event =>
         (event, event.anonymizedBuyer, event.anonymizedSeller))
 
-  def joinAllFibers(fibers: Seq[Fiber[Throwable, String]]) =
-    ZIO.collectAll(fibers.map(fiber => fiber.join))
-
   private val effects = ZIO.scoped {
     for {
       counterpartyService <- ZIO.service[CounterpartyService]
@@ -34,19 +31,24 @@ object ClientApp extends ZIOAppDefault:
         eventHashTuples.map((event, buyer, seller) =>
           ZIO.succeed(event)
             .zip(
-              ZIO.collectAll(
+              ZIO.collectAllPar(
                 Seq(
                   counterpartyService.deanonymize(buyer)
                     .orElse(counterpartyService.deanonymize(buyer.toLowerCase))
-                    .fork,
+                    .map(returnString => (ClientSide.Buyer, returnString))
+                    .debugThread,
                   counterpartyService.deanonymize(seller)
                     .orElse(counterpartyService.deanonymize(seller.toLowerCase))
-                    .fork))
-                .flatMap(joinAllFibers))))
+                    .map(returnString => (ClientSide.Seller, returnString))
+                    .debugThread)))))
 
       enrichedEvents = eventsAndResolved.map {
-        case (event, resolvedBuyer +: resolvedSeller +: _) =>
-          EnrichedEvent(event, resolvedBuyer, resolvedSeller)
+        case (event, seq) =>
+          seq match
+            case (ClientSide.Buyer, client) :: tail =>
+              EnrichedEvent(event, client, tail.head._2)
+            case (ClientSide.Seller, client) :: tail =>
+              EnrichedEvent(event, tail.head._2, client)
       }
     } yield enrichedEvents
   }
