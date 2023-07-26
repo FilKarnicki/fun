@@ -16,9 +16,12 @@ import scala.language.{existentials, postfixOps}
 
 object ClientApp extends ZIOAppDefault:
   private val effects = ZIO.scoped {
+    val eventSourceZio = ZIO.acquireRelease(
+      ZIO.attempt(Source.fromResource("resource.json")))(finalizingSource => ZIO.succeed(finalizingSource.close))
+
     for {
-      eventSource <- ZIO.attempt(Source.fromResource("resource.json"))
-      eventString <- ZIO.attempt(eventSource.getLines.mkString).ensuring(ZIO.succeed(eventSource.close))
+      eventSource <- eventSourceZio
+      eventString <- ZIO.attempt(eventSource.getLines.mkString)
       events <- ZIO.fromEither(decode[Seq[Event]](eventString))
       counterpartyService <- ZIO.service[CounterpartyService]
       eventsAndResolved <- ZIO.collectAll(
