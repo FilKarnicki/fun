@@ -15,40 +15,41 @@ import scala.io.Source
 import scala.language.{existentials, postfixOps}
 
 object ClientApp extends ZIOAppDefault:
-  private val effects = ZIO.scoped {
-    val eventSourceZio = ZIO.acquireRelease(
-      ZIO.attempt(Source.fromResource("resource.json")))(finalizingSource => ZIO.succeed(finalizingSource.close))
-
-    for {
-      eventSource <- eventSourceZio
-      eventString <- ZIO.attempt(eventSource.getLines.mkString)
+  private val eventSource = ZIO.acquireReleaseWith(
+    ZIO.attempt(Source.fromResource("resource.json")))(
+    src => ZIO.succeed(src.close))(
+    src => for {
+      eventString <- ZIO.attempt(src.getLines.mkString)
       events <- ZIO.fromEither(decode[Seq[Event]](eventString))
-      counterpartyService <- ZIO.service[CounterpartyService]
-      eventsAndResolved <- ZIO.collectAll(
-        events.map(event =>
-          ZIO.succeed(event)
-            .zip(
-              ZIO.collectAllPar(
-                Seq(
-                  counterpartyService.deanonymize(event.anonymizedBuyer)
-                    .orElse(counterpartyService.deanonymize(event.anonymizedBuyer.toLowerCase))
-                    .map(returnString => (ClientSide.Buyer, returnString))
-                    .debugThread,
-                  counterpartyService.deanonymize(event.anonymizedSeller)
-                    .orElse(counterpartyService.deanonymize(event.anonymizedSeller))
-                    .map(returnString => (ClientSide.Seller, returnString))
-                    .debugThread)))))
+    } yield events)
 
-      enrichedEvents = eventsAndResolved.map {
-        case (event, seq) =>
-          seq match
-            case (ClientSide.Buyer, client) :: tail =>
-              EnrichedEvent(event, client, tail.head._2)
-            case (ClientSide.Seller, client) :: tail =>
-              EnrichedEvent(event, tail.head._2, client)
-      }
-    } yield enrichedEvents
-  }
+  private val effects = for {
+    events <- eventSource
+    counterpartyService <- ZIO.service[CounterpartyService]
+    eventsAndResolved <- ZIO.collectAll(
+      events.map(event =>
+        ZIO.succeed(event)
+          .zip(
+            ZIO.collectAllPar(
+              Seq(
+                counterpartyService.deanonymize(event.anonymizedBuyer)
+                  .orElse(counterpartyService.deanonymize(event.anonymizedBuyer.toLowerCase))
+                  .map(returnString => (ClientSide.Buyer, returnString))
+                  .debugThread,
+                counterpartyService.deanonymize(event.anonymizedSeller)
+                  .orElse(counterpartyService.deanonymize(event.anonymizedSeller))
+                  .map(returnString => (ClientSide.Seller, returnString))
+                  .debugThread)))))
+
+    enrichedEvents = eventsAndResolved.map {
+      case (event, seq) =>
+        seq match
+          case (ClientSide.Buyer, client) :: tail =>
+            EnrichedEvent(event, client, tail.head._2)
+          case (ClientSide.Seller, client) :: tail =>
+            EnrichedEvent(event, tail.head._2, client)
+    }
+  } yield enrichedEvents
 
   override def run: URIO[Any, ExitCode] =
     val auto = effects
