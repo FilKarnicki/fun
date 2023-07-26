@@ -1,0 +1,14 @@
+[
+  {
+    "traderId": "t1",
+    "notional": 1000000,
+    "anonymizedBuyer": "a",
+    "anonymizedSeller": "b"
+  },
+  {
+    "traderId": "t1",
+    "notional": 800000,
+    "anonymizedBuyer": "b",
+    "anonymizedSeller": "a"
+  }
+]

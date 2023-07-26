@@ -26,6 +26,7 @@ val clientServerLibraries = Seq(
     ("dev.zio" %% "zio-http-testkit" % zioHttpVersion % Test) +:
     Seq(
       "circe-core",
+      "circe-parser",
       "circe-generic")
       .map(artifact => "io.circe" %% artifact % circeVersion)).flatten
 

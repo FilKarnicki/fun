@@ -2,43 +2,37 @@ package eu.karnicki.fun
 
 import eu.karnicki.fun.http.CounterpartyService.CounterpartyServiceLive
 import eu.karnicki.fun.http.{CounterpartyService, CounterpartyServiceConfig}
-import io.circe.Decoder
+import io.circe.*
+import io.circe.generic.auto.*
+import io.circe.parser.*
+import io.circe.syntax.*
 import zio.*
 import zio.http.netty.NettyConfig
 import zio.http.netty.client.NettyClientDriver
 import zio.http.{Client, DnsResolver, Response, ZClient}
 
+import scala.io.Source
 import scala.language.{existentials, postfixOps}
 
 object ClientApp extends ZIOAppDefault:
-  private val events = Seq(
-    Event(
-      traderId = "t1",
-      notional = 1_000_000,
-      anonymizedBuyer = "a",
-      anonymizedSeller = "b"),
-    Event("t1", 800_000, "B", "A"))
-
-  private val eventHashTuples =
-    events
-      .map(event =>
-        (event, event.anonymizedBuyer, event.anonymizedSeller))
-
   private val effects = ZIO.scoped {
     for {
+      eventSource <- ZIO.attempt(Source.fromResource("resource.json"))
+      eventString <- ZIO.attempt(eventSource.getLines.mkString).ensuring(ZIO.succeed(eventSource.close))
+      events <- ZIO.fromEither(decode[Seq[Event]](eventString))
       counterpartyService <- ZIO.service[CounterpartyService]
       eventsAndResolved <- ZIO.collectAll(
-        eventHashTuples.map((event, buyer, seller) =>
+        events.map(event =>
           ZIO.succeed(event)
             .zip(
               ZIO.collectAllPar(
                 Seq(
-                  counterpartyService.deanonymize(buyer)
-                    .orElse(counterpartyService.deanonymize(buyer.toLowerCase))
+                  counterpartyService.deanonymize(event.anonymizedBuyer)
+                    .orElse(counterpartyService.deanonymize(event.anonymizedBuyer.toLowerCase))
                     .map(returnString => (ClientSide.Buyer, returnString))
                     .debugThread,
-                  counterpartyService.deanonymize(seller)
-                    .orElse(counterpartyService.deanonymize(seller.toLowerCase))
+                  counterpartyService.deanonymize(event.anonymizedSeller)
+                    .orElse(counterpartyService.deanonymize(event.anonymizedSeller))
                     .map(returnString => (ClientSide.Seller, returnString))
                     .debugThread)))))
 
