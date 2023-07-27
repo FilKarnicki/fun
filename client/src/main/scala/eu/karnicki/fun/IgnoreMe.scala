@@ -5,6 +5,25 @@ import zio.*
 import scala.language.postfixOps
 
 object IgnoreMe:
+  def racePair[R, E, A, B](
+                            zio1: => ZIO[R, E, A],
+                            zio2: => ZIO[R, E, B]): ZIO[R, Nothing, Either[(Exit[E, A], Fiber[E, B]), (Fiber[E, A], Exit[E, B])]] =
+    ZIO.uninterruptibleMask(restore => for {
+      promise <- Promise.make[Nothing, Either[Exit[E, A], Exit[E, B]]]
+      fiberA <- zio1.onExit(outcomeA => promise.succeed(Left(outcomeA))).fork
+      fiberB <- zio2.onExit(outcomeB => promise.succeed(Right(outcomeB))).fork
+      result <- restore(promise.await).onInterrupt {
+        for {
+          iA <- fiberA.interrupt.fork
+          iB <- fiberB.interrupt.fork
+          _ <- iA.join
+          _ <- iB.join
+        } yield ()
+      }
+    } yield result match
+      case Left(value) => Left(value, fiberB)
+      case Right(value) => Right(fiberA, value))
+
   val shower = ZIO.succeed("taking a shower")
   val water = ZIO.succeed("boiling water")
   val waterWithTime = water.debug(printDebugThread) *> ZIO.sleep(5 seconds) *> ZIO.succeed("boiled!")
