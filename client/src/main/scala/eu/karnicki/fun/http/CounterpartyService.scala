@@ -18,7 +18,7 @@ object CounterpartyServiceConfig:
   lazy val live: ULayer[CounterpartyServiceConfig] =
     ZLayer.succeed(CounterpartyServiceConfig(
       url = "http://localhost:8080/deanonymize/",
-      retryStrategy = Schedule.recurs(5) && Schedule.spaced(100 millis) && Schedule.recurWhile(_ == Errors.Transient)))
+      retryStrategy = Schedule.recurs(5) && Schedule.exponential(100 millis, 1.2) && Schedule.recurWhile(_ == Errors.Transient)))
 
 trait CounterpartyService:
   def deanonymize[T](anonymizedCounterpartyId: CounterpartyHash): zio.ZIO[zio.http.Client, ServiceCallError, String]
@@ -46,4 +46,4 @@ object CounterpartyService:
             case status =>
               ZIO.fail(Errors.ResponseError(status.text))
         })
-        .retry(counterpartyServiceConfig.retryStrategy)
+        .retry(counterpartyServiceConfig.retryStrategy >>> Schedule.elapsed.mapZIO(elapsed => ZIO.logInfo(s"Backed off retrying for: $elapsed")))
