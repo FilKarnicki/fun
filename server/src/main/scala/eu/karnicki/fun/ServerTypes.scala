@@ -15,7 +15,7 @@ enum TradeType:
 
 case class Event(traderId: TraderId, notional: BigDecimal, anonymizedBuyer: CounterpartyHash, anonymizedSeller: CounterpartyHash)
 
-case class EnrichedEvent(event: Event, buyer: CounterpartyId, seller: CounterpartyId)
+case class EnrichedEvent(event: Event, buyer: CounterpartyId, seller: CounterpartyId, price: BigDecimal)
 
 case class Trader(id: TraderId, name: String)
 
