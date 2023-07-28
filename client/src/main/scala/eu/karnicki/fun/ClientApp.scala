@@ -18,14 +18,17 @@ import scala.language.{existentials, postfixOps}
 object ClientApp extends ZIOAppDefault:
   private val effects = for {
     counterpartyService <- ZIO.service[CounterpartyService]
+    counterpartyServiceConfig <- ZIO.service[CounterpartyServiceConfig]
+    counterpartyServiceSemaphore <- Semaphore.make(counterpartyServiceConfig.maxInFlight)
     events <- eventSource("resource.json")
     pricedEventsAndCounterparties <- ZIO.collectAll(
-      events.map(event => priceEvent(event)
-        .zipPar(ZIO.collectAllPar(
-          Seq(
-            retrieveCounterpartyEffect(counterpartyService, event.anonymizedBuyer, ClientSide.Buyer),
-            retrieveCounterpartyEffect(counterpartyService, event.anonymizedSeller, ClientSide.Seller)
-          )))))
+      events.map(event =>
+        priceEvent(event)
+          .zipPar(ZIO.collectAllPar(
+            Seq(
+              retrieveCounterpartyEffect(counterpartyService, event.anonymizedBuyer, ClientSide.Buyer, counterpartyServiceSemaphore),
+              retrieveCounterpartyEffect(counterpartyService, event.anonymizedSeller, ClientSide.Seller, counterpartyServiceSemaphore)
+            )))))
 
     enrichedEvents = pricedEventsAndCounterparties.map {
       case (event, price, seq) =>
@@ -59,9 +62,9 @@ object ClientApp extends ZIOAppDefault:
     ZIO.succeed(event).zip(pricing(event.notional))
   }
 
-  private def retrieveCounterpartyEffect(counterpartyService: CounterpartyService, counterpartyHash: CounterpartyHash, clientSide: ClientSide) = {
-    counterpartyService.deanonymize(counterpartyHash)
-      .orElse(counterpartyService.deanonymize(counterpartyHash.toLowerCase))
+  private def retrieveCounterpartyEffect(counterpartyService: CounterpartyService, counterpartyHash: CounterpartyHash, clientSide: ClientSide, semaphore: Semaphore) = {
+    counterpartyService.deanonymize(counterpartyHash, semaphore)
+      .orElse(counterpartyService.deanonymize(counterpartyHash.toLowerCase, semaphore))
       .map(returnString => (clientSide, returnString))
       .debugThread
   }

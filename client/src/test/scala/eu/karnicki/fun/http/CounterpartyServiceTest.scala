@@ -13,7 +13,10 @@ import java.net.ConnectException
 
 object CounterpartyServiceTest extends ZIOSpecDefault:
   private lazy val configZLayer: ULayer[CounterpartyServiceConfig] =
-    ZLayer.succeed(CounterpartyServiceConfig("http://localhost/deanonymise/", Schedule.recurs(10)))
+    ZLayer.succeed(
+      CounterpartyServiceConfig("http://localhost/deanonymise/",
+      Schedule.recurs(10),
+      maxInFlight = 1))
 
   private lazy val testServiceLayer: ZLayer[CounterpartyServiceConfig, Nothing, CounterpartyService] = ZLayer.scoped {
     for {
@@ -34,7 +37,7 @@ object CounterpartyServiceTest extends ZIOSpecDefault:
               ZIO.succeed(Response(status = Status.Ok, body = Body.fromString("A")))
             case request: Request if requestCalls > 3 =>
               ZIO.succeed(Response(status = Status.Ok, body = Body.fromString("Z")))
-            case request: Request  =>
+            case request: Request =>
               requestCalls = requestCalls + 1 // TODO: ugly
               ZIO.failCause(Cause.fail(new ConnectException("oh noes"))) // TODO: doesn't actually cause the client to fail
           }

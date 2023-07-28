@@ -44,6 +44,7 @@ object CounterpartyServiceApp extends IOApp:
 
     HttpRoutes.of[F] {
       case GET -> Root / "deanonymize" / counterpartyHash =>
+        Thread.sleep(1000)
         counterpartyStore.get(counterpartyHash) match
           case Some(counterpartyId) if counterpartyId.isBlank =>
             BadRequest(counterpartyHash)
