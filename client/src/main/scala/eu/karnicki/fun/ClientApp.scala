@@ -17,18 +17,15 @@ import scala.language.{existentials, postfixOps}
 
 object ClientApp extends ZIOAppDefault:
   private val effects = for {
-    events <- eventSource("resource.json")
-    pricedEvents <- priceEvents(events)
     counterpartyService <- ZIO.service[CounterpartyService]
+    events <- eventSource("resource.json")
     pricedEventsAndCounterparties <- ZIO.collectAll(
-      pricedEvents.map((event, price) =>
-        ZIO.succeed((event, price))
-          .zip(
-            ZIO.collectAllPar(
-              Seq(
-                retrieveCounterpartyEffect(counterpartyService, event.anonymizedBuyer, ClientSide.Buyer),
-                retrieveCounterpartyEffect(counterpartyService, event.anonymizedSeller, ClientSide.Seller)
-              )))))
+      events.map(event => priceEvent(event)
+        .zipPar(ZIO.collectAllPar(
+          Seq(
+            retrieveCounterpartyEffect(counterpartyService, event.anonymizedBuyer, ClientSide.Buyer),
+            retrieveCounterpartyEffect(counterpartyService, event.anonymizedSeller, ClientSide.Seller)
+          )))))
 
     enrichedEvents = pricedEventsAndCounterparties.map {
       case (event, price, seq) =>
@@ -58,8 +55,8 @@ object ClientApp extends ZIOAppDefault:
       )(
         throwable => cb(ZIO.fail(throwable).debugThread)))
 
-  private def priceEvents(events: Seq[Event]) = {
-    ZIO.collectAll(events.map(event => ZIO.succeed(event).zip(pricing(event.notional))))
+  private def priceEvent(event: Event): ZIO[Any, Throwable, (Event, BigDecimal)] = {
+    ZIO.succeed(event).zip(pricing(event.notional))
   }
 
   private def retrieveCounterpartyEffect(counterpartyService: CounterpartyService, counterpartyHash: CounterpartyHash, clientSide: ClientSide) = {
