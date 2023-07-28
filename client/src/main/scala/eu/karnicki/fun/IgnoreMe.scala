@@ -24,68 +24,56 @@ object IgnoreMe:
       case Left(value) => Left(value, fiberB)
       case Right(value) => Right(fiberA, value))
 
-  val shower = ZIO.succeed("taking a shower")
-  val water = ZIO.succeed("boiling water")
-  val waterWithTime = water.debug(printDebugThread) *> ZIO.sleep(5 seconds) *> ZIO.succeed("boiled!")
-  val coffee = ZIO.succeed("preparing coffee")
-  val alice = ZIO.succeed("call from Alice")
 
-  def printDebugThread = s"[${Thread.currentThread().getName}]"
+import zio.*
 
-  val res1 = for
-    _ <- shower.debug(printDebugThread)
-    _ <- water.debug(printDebugThread)
-  yield ()
+import scala.collection.immutable.Queue
 
-  val res2 =
-    shower
-      .flatMap(_ => water)
-      .map(_ => ())
+abstract class Mutex {
+  def acquire: UIO[Unit]
 
-  def concurrentTwo() = for {
-    _ <- shower.debug(printDebugThread).fork
-    _ <- water.debug(printDebugThread)
-    _ <- coffee.debug(printDebugThread)
-  } yield ()
+  def release: UIO[Unit]
+}
 
-  def concurrentRoutine() = for {
-    showerFiber <- shower.debug(printDebugThread).fork
-    waterFiber <- water.debug(printDebugThread).fork
-    zipped = showerFiber.zip(waterFiber)
-    result <- zipped.join.debug(printDebugThread)
-    _ <- ZIO.succeed(s"result: $result") *> coffee.debug(printDebugThread)
-  } yield ()
+object Mutex {
+  type Signal = Promise[Nothing, Unit]
 
-  def concurrentRoutine2() = for {
-    _ <- shower.debug(printDebugThread)
-    boilingFiber <- waterWithTime.fork
-    _ <- alice.debug(printDebugThread).fork *> boilingFiber.interrupt.debug(printDebugThread)
-    _ <- ZIO.succeed("screw coffee, going with alice").debug(printDebugThread)
+  case class State(locked: Boolean, waiting: Queue[Signal])
 
-  } yield ()
+  val unlocked = State(locked = false, Queue())
 
-  val prepareCofeeWithTime = ZIO.succeed("preparing coffee").debug(printDebugThread) *> ZIO.sleep(5 seconds) *> ZIO.succeed("coffee ready1!!!")
+  def make: UIO[Mutex] = Ref.make(unlocked).map(createInterruptibleMutex)
 
-  def con3 = for {
-    _ <- shower.debug(printDebugThread)
-    _ <- water.debug(printDebugThread)
-    coffeeFiber <- prepareCofeeWithTime.debug(printDebugThread).fork.uninterruptible
-    result <- alice.debug(printDebugThread).fork *> coffeeFiber.interrupt.debug(printDebugThread)
-    _ <- result match
-      case Exit.Success(value) =>
-        ZIO.succeed("sorry alice, making coffee at home").debug(printDebugThread)
-      case Exit.Failure(cause) =>
-        ZIO.succeed("going to a caffee with alice").debug(printDebugThread)
-  } yield ()
+  def createInterruptibleMutex(state: Ref[State]) =
+    new Mutex {
+      override def acquire = ZIO.uninterruptibleMask { restore =>
+        Promise.make[Nothing, Unit].flatMap { signal =>
 
-  def con32 =
-    shower.debug(printDebugThread)
-      .flatMap(_ => water.debug(printDebugThread))
-      .flatMap(_ => prepareCofeeWithTime.debug(printDebugThread).fork.uninterruptible)
-      .flatMap(coffeeFiber => alice.debug(printDebugThread).fork *> coffeeFiber.interrupt.debug(printDebugThread))
-      .map {
-        case Exit.Success(value) =>
-          ZIO.succeed("sorry alice, making coffee at home").debug(printDebugThread)
-        case Exit.Failure(cause) =>
-          ZIO.succeed("going to a caffee with alice").debug(printDebugThread)
+          val cleanup: UIO[Unit] = state.modify {
+            case State(flag, waiting) =>
+              val newWaiting = waiting.filterNot(_ eq signal)
+              // blocked only if newWaiting != waiting => release the mutex
+              val wasBlocked = newWaiting != waiting
+              val decision = if (wasBlocked) ZIO.unit else release
+
+              decision -> State(flag, newWaiting)
+          }.flatten
+
+          state.modify {
+            case State(false, _) => ZIO.unit -> State(locked = true, Queue())
+            case State(true, waiting) => restore(signal.await).onInterrupt(cleanup) -> State(locked = true, waiting.enqueue(signal))
+          }.flatten
+        }
       }
+
+      override def release = state.modify {
+        case State(false, _) => ZIO.unit -> unlocked
+        case State(true, waiting) =>
+          if (waiting.isEmpty) ZIO.unit -> unlocked
+          else {
+            val (first, rest) = waiting.dequeue
+            first.succeed(()).unit -> State(locked = true, rest)
+          }
+      }.flatten
+    }
+}
