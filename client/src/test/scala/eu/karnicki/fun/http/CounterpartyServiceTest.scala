@@ -31,6 +31,7 @@ object CounterpartyServiceTest extends ZIOSpecDefault:
         val request2 = Request.get(URL(Path.decode("/deanonymise/z")))
         var requestCalls = 0
         for {
+          semaphore <- Semaphore.make(10)
           client <- ZIO.service[Client]
           _ <- TestClient.addHandler {
             case request if request.path.last.contains("a") =>
@@ -42,8 +43,8 @@ object CounterpartyServiceTest extends ZIOSpecDefault:
               ZIO.failCause(Cause.fail(new ConnectException("oh noes"))) // TODO: doesn't actually cause the client to fail
           }
           counterpartyService <- ZIO.service[CounterpartyService]
-          responseA <- counterpartyService.deanonymize("a")
-          responseZ <- counterpartyService.deanonymize("z").exit
+          responseA <- counterpartyService.deanonymize("a",semaphore)
+          responseZ <- counterpartyService.deanonymize("z",semaphore).exit
         } yield assertTrue(responseA == "A") &&
           assert(responseZ)(fails(equalTo(Transient))) // && TODO: assert
 
