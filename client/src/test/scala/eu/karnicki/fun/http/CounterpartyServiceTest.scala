@@ -1,10 +1,11 @@
 package eu.karnicki.fun.http
 
 import eu.karnicki.fun.Errors
-import eu.karnicki.fun.Errors.{ServiceCallError, Transient}
+import eu.karnicki.fun.Errors.{ResponseError, ServiceCallError, Transient}
 import eu.karnicki.fun.http.CounterpartyService.CounterpartyServiceLive
 import zio.*
 import zio.Cause.Die
+import zio.Exit.Failure
 import zio.http.*
 import zio.test.*
 import zio.test.Assertion.*
@@ -15,7 +16,7 @@ object CounterpartyServiceTest extends ZIOSpecDefault:
   private lazy val configZLayer: ULayer[CounterpartyServiceConfig] =
     ZLayer.succeed(
       CounterpartyServiceConfig("http://localhost/deanonymise/",
-      Schedule.recurs(10),
+      Schedule.recurs(3),
       maxInFlight = 1))
 
   private lazy val testServiceLayer: ZLayer[CounterpartyServiceConfig, Nothing, CounterpartyService] = ZLayer.scoped {
@@ -26,7 +27,7 @@ object CounterpartyServiceTest extends ZIOSpecDefault:
 
   override def spec =
     suite("CounterpartyServiceSpec")(
-      test("it should return resolved value if available and non-resolved one if not"):
+      test("it should map 200 to string and fail with NotFound if 404"):
         val request = Request.get(URL(Path.decode("/deanonymise/a")))
         val request2 = Request.get(URL(Path.decode("/deanonymise/z")))
         var requestCalls = 0
@@ -40,15 +41,13 @@ object CounterpartyServiceTest extends ZIOSpecDefault:
               ZIO.succeed(Response(status = Status.Ok, body = Body.fromString("Z")))
             case request: Request =>
               requestCalls = requestCalls + 1 // TODO: ugly
-              ZIO.failCause(Cause.fail(new ConnectException("oh noes"))) // TODO: doesn't actually cause the client to fail
+              ZIO.succeed(Response(status = Status.NotFound, body = Body.fromString("z")))
           }
           counterpartyService <- ZIO.service[CounterpartyService]
           responseA <- counterpartyService.deanonymize("a",semaphore)
           responseZ <- counterpartyService.deanonymize("z",semaphore).exit
         } yield assertTrue(responseA == "A") &&
-          assert(responseZ)(fails(equalTo(Transient))) // && TODO: assert
-
-
+          assertTrue(responseZ == Failure(Cause.fail(Errors.NotFound)))
     )
       .provide(TestClient.layer,
         configZLayer,
