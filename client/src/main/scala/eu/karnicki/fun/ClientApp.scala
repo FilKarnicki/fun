@@ -16,29 +16,32 @@ import scala.io.Source
 import scala.language.{existentials, postfixOps}
 
 object ClientApp extends ZIOAppDefault:
-  private val effects = for {
-    counterpartyService <- ZIO.service[CounterpartyService]
-    counterpartyServiceConfig <- ZIO.service[CounterpartyServiceConfig]
-    counterpartyServiceSemaphore <- Semaphore.make(counterpartyServiceConfig.maxInFlight)
-    events <- eventSource("resource.json")
-    pricedEventsAndCounterparties <- ZIO.collectAll(
-      events.map(event =>
-        priceEvent(event)
-          .zipPar(ZIO.collectAllPar(
-            Seq(
-              retrieveCounterpartyEffect(counterpartyService, event.anonymizedBuyer, ClientSide.Buyer, counterpartyServiceSemaphore),
-              retrieveCounterpartyEffect(counterpartyService, event.anonymizedSeller, ClientSide.Seller, counterpartyServiceSemaphore)
-            )))))
+  def effects(eventSource: IO[Throwable, Seq[Event]]): ZIO[Client with CounterpartyServiceConfig with CounterpartyService,
+    Throwable,
+    Seq[EnrichedEvent]] =
+    for {
+      counterpartyService <- ZIO.service[CounterpartyService]
+      counterpartyServiceConfig <- ZIO.service[CounterpartyServiceConfig]
+      counterpartyServiceSemaphore <- Semaphore.make(counterpartyServiceConfig.maxInFlight)
+      events <- eventSource
+      pricedEventsAndCounterparties <- ZIO.collectAll(
+        events.map(event =>
+          priceEvent(event)
+            .zipPar(ZIO.collectAllPar(
+              Seq(
+                retrieveCounterpartyEffect(counterpartyService, event.anonymizedBuyer, ClientSide.Buyer, counterpartyServiceSemaphore),
+                retrieveCounterpartyEffect(counterpartyService, event.anonymizedSeller, ClientSide.Seller, counterpartyServiceSemaphore)
+              )))))
 
-    enrichedEvents = pricedEventsAndCounterparties.map {
-      case (event, price, seq) =>
-        seq match
-          case (ClientSide.Buyer, client) :: tail =>
-            EnrichedEvent(event, client, tail.head._2, price)
-          case (ClientSide.Seller, client) :: tail =>
-            EnrichedEvent(event, tail.head._2, client, price)
-    }
-  } yield enrichedEvents
+      enrichedEvents = pricedEventsAndCounterparties.map {
+        case (event, price, seq) =>
+          seq match
+            case (ClientSide.Buyer, client) :: tail =>
+              EnrichedEvent(event, client, tail.head._2, price)
+            case (ClientSide.Seller, client) :: tail =>
+              EnrichedEvent(event, tail.head._2, client, price)
+      }
+    } yield enrichedEvents
 
   private def eventSource(resourceJson: String) = ZIO.acquireReleaseWith(
     ZIO.attempt(Source.fromResource(resourceJson))
@@ -70,7 +73,7 @@ object ClientApp extends ZIOAppDefault:
   }
 
   override def run: URIO[Any, ExitCode] =
-    val auto = effects
+    val auto = effects(eventSource("resource.json"))
       .debug
       .provide(
         Client.default,
