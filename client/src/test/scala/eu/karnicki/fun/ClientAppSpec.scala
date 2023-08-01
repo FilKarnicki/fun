@@ -25,8 +25,11 @@ object ClientAppSpec extends ZIOSpecDefault:
         check(
           Gen.stringBounded(0, 99)(Gen.alphaChar),
           Gen.bigDecimal(-1_000_000_000, 1_000_000_000),
-          Gen.string(Gen.alphaNumericChar),
-          Gen.string(Gen.alphaNumericChar)) {
+          for {
+            first <- Gen.elements("CH", "US", "SG")
+            second <- Gen.stringBounded(0,50)(Gen.alphaNumericChar)
+          } yield s"$first-$second",
+          Gen.fromRandom(_.nextUUID).map(_.toString.toLowerCase)) {
           (trader, notional, anonBuyer, anonSeller) =>
             val event1 = Event(trader, notional, anonBuyer, anonSeller)
             val effectsToBeTested = ClientApp.effects(ZIO.succeed(Seq(event1)))
