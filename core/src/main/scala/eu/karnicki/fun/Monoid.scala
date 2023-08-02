@@ -16,9 +16,14 @@ object Monoid:
     @targetName("combine")
     override def ++(a: Int, b: Int): Int =
       a + b
+
   /**
    * This method makes it so that we don't have to use summon
    * Use example:  Monoid[Int]
    */
   def apply[T](using instance: Monoid[T]): Monoid[T] =
     instance
+
+  extension [T] (a: T)
+    inline def !+!(b: T)(using monoid: Monoid[T]) : T =
+      monoid.++(a,b)

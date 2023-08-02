@@ -13,6 +13,7 @@ import scala.util.Try
 
 object RiskServiceApp extends ZIOAppDefault:
   implicit val statusEncoder: Encoder[eu.karnicki.fun.Status] = Encoder[String].contramap(_.toString)
+  implicit val thetaEncoder: Encoder[Theta] = Encoder[BigDecimal].contramap(_.value)
   implicit val statusDecoder: Decoder[eu.karnicki.fun.Status] = Decoder[String].emap(string =>
     Try(eu.karnicki.fun.Status.valueOf(string)).toOption.toRight(s"Invalid status: $string. Try ${eu.karnicki.fun.Status.values.asJson}"))
 
@@ -26,7 +27,8 @@ object RiskServiceApp extends ZIOAppDefault:
           case Left(error) =>
             Response.text(s"could not deserialize obligation due to ${error.getMessage}").withStatus(BadRequest)
           case Right(obligation) =>
-            Response.text(calcRisk(obligation.instruments).asJson.toString)
+            val risk = calcRisk(obligation.instruments)
+            Response.text(risk.asJson.toString)
         }.refineOrDie {
           case t: Throwable =>
             Response.text(s"unknown error: ${t.getMessage}").withStatus(InternalServerError)
