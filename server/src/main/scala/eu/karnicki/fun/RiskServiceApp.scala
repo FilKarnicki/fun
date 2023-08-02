@@ -1,5 +1,6 @@
 package eu.karnicki.fun
 
+import eu.karnicki.fun.RiskCalc.calcRisk
 import io.circe.*
 import io.circe.generic.auto.*
 import io.circe.parser.*
@@ -25,11 +26,7 @@ object RiskServiceApp extends ZIOAppDefault:
           case Left(error) =>
             Response.text(s"could not deserialize obligation due to ${error.getMessage}").withStatus(BadRequest)
           case Right(obligation) =>
-            Response.text(
-                Risk(
-                  delta = obligation.instrument.notional / 100,
-                  gamma = obligation.instrument.notional / 1000)
-                .asJson.toString)
+            Response.text(calcRisk(obligation.instruments).asJson.toString)
         }.refineOrDie {
           case t: Throwable =>
             Response.text(s"unknown error: ${t.getMessage}").withStatus(InternalServerError)
