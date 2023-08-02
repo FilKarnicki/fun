@@ -20,15 +20,15 @@ enablePlugins(
 //}
 
 val scalatest = "org.scalatest" %% "scalatest" % scalatestVersion % Test
+val zioHttp = Seq(
+  "dev.zio" %% "zio-http" % zioHttpVersion,
+  "dev.zio" %% "zio-http-testkit" % zioHttpVersion % Test)
 val clientServerLibraries = Seq(
-  scalatest +:
-    ("dev.zio" %% "zio-http" % zioHttpVersion) +:
-    ("dev.zio" %% "zio-http-testkit" % zioHttpVersion % Test) +:
-    Seq(
-      "circe-core",
-      "circe-parser",
-      "circe-generic")
-      .map(artifact => "io.circe" %% artifact % circeVersion)).flatten
+  (scalatest +: zioHttp) ++ Seq(
+    "circe-core",
+    "circe-parser",
+    "circe-generic")
+    .map(artifact => "io.circe" %% artifact % circeVersion)).flatten
 
 val core = (project in file("core")).settings(
   libraryDependencies ++=

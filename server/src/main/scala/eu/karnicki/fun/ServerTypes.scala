@@ -24,3 +24,7 @@ case class Instrument(id: InstrumentId, notional: BigDecimal)
 case class Contract(id: ContractId, obligations: Seq[Obligation])
 
 case class Obligation(buyer: CounterpartyId, seller: CounterpartyId, instrument: Instrument, status: Status)
+
+case class Risk(delta: BigDecimal, gamma: BigDecimal)
+
+case class EnrichedObligation(obligation: Obligation, risk: Risk)
