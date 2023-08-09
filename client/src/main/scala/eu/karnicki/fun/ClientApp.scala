@@ -24,14 +24,7 @@ object ClientApp extends ZIOAppDefault:
       counterpartyServiceConfig <- ZIO.service[CounterpartyServiceConfig]
       counterpartyServiceSemaphore <- Semaphore.make(counterpartyServiceConfig.maxInFlight)
       events <- eventSource
-      pricedEventsAndCounterparties <- ZIO.collectAll(
-        events.map(event =>
-          priceEvent(event)
-            .zipPar(ZIO.collectAllPar(
-              Seq(
-                retrieveCounterpartyEffect(counterpartyService, event.anonymizedBuyer, ClientSide.Buyer, counterpartyServiceSemaphore),
-                retrieveCounterpartyEffect(counterpartyService, event.anonymizedSeller, ClientSide.Seller, counterpartyServiceSemaphore)
-              )))))
+      pricedEventsAndCounterparties <- priceEventsAndGetCounterparties(counterpartyService, counterpartyServiceSemaphore, events)
 
       enrichedEvents = pricedEventsAndCounterparties.map {
         case (event, price, seq) =>
@@ -42,6 +35,17 @@ object ClientApp extends ZIOAppDefault:
               EnrichedEvent(event, tail.head._2, client, price)
       }
     } yield enrichedEvents
+
+  private def priceEventsAndGetCounterparties(counterpartyService: CounterpartyService, counterpartyServiceSemaphore: Semaphore, events: Seq[Event]) = {
+    ZIO.collectAll(
+      events.map(event =>
+        priceEvent(event)
+          .zipPar(ZIO.collectAllPar(
+            Seq(
+              retrieveCounterpartyEffect(counterpartyService, event.anonymizedBuyer, ClientSide.Buyer, counterpartyServiceSemaphore),
+              retrieveCounterpartyEffect(counterpartyService, event.anonymizedSeller, ClientSide.Seller, counterpartyServiceSemaphore)
+            )))))
+  }
 
   private def eventSource(resourceJson: String) = ZIO.acquireReleaseWith(
     ZIO.attempt(Source.fromResource(resourceJson))

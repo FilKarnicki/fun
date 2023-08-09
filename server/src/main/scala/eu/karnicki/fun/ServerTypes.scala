@@ -1,5 +1,7 @@
 package eu.karnicki.fun
 
+import java.time.Instant
+
 type TradeId = String
 type TraderId = String
 type ContractId = String
@@ -25,8 +27,10 @@ case class Contract(id: ContractId, obligations: Seq[Obligation])
 
 case class Obligation(buyer: CounterpartyId, seller: CounterpartyId, instruments: Seq[Instrument], status: Status)
 
+case class TimeSensitive[T](values: List[(T, Instant)])
+
 case class Theta(value: BigDecimal)
 
-case class Risk(delta: BigDecimal, gamma: BigDecimal, theta: Theta)
+case class Risk(delta: BigDecimal, gamma: BigDecimal, theta: TimeSensitive[Theta])
 
 case class EnrichedObligation(obligation: Obligation, risk: Risk)

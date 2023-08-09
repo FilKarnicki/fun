@@ -32,8 +32,10 @@ val clientServerLibraries = Seq(
 
 val core = (project in file("core")).settings(
   libraryDependencies ++=
-    scalatest +:
-      Seq("zio", "zio-streams").map(artifact => "dev.zio" %% artifact % zioVersion)
+    (scalatest +:
+      Seq("zio", "zio-streams").map(artifact => "dev.zio" %% artifact % zioVersion)) ++ Seq(
+    "org.slf4j" % "slf4j-api" % "2.0.5",
+    "org.slf4j" % "slf4j-simple" % "2.0.5")
 )
 val server = (project in file("server"))
   .settings(

@@ -4,7 +4,7 @@ This project is an amalgamation of all the different things I'm trying out in th
 - Semigroup
 - Monoid
 - Monad
-- Typeclass
+- Typeclass (cats, http4s)
 - ZIO
 - dockerized integration tests
 
