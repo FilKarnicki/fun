@@ -1,9 +1,10 @@
 package eu.karnicki.fun
 
 import cats.*
+import cats.data.Reader
 import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits.*
-import com.comcast.ip4s.{Port, ipv4, port}
+import com.comcast.ip4s.{Ipv4Address, Port, ipv4, port}
 import eu.karnicki.fun.KindsAndTypeLambdas.EitherMonad
 import io.circe.generic.auto.*
 import io.circe.syntax.*
@@ -60,14 +61,27 @@ object CounterpartyServiceApp extends IOApp:
   def allRoutesComplete[F[_] : Monad]: HttpApp[F] =
     allRoutes[F].orNotFound
 
+  case class Config(host: Ipv4Address, port: Option[Port])
+
+  private val configReader: Reader[List[String], Config] = Reader(args =>
+    Config(
+      ipv4"0.0.0.0",
+      args
+        .headOption
+        .flatMap(head =>
+          scala.util.Try(head.toInt).toOption)
+        .flatMap(Port.fromInt)))
+
   override def run(args: List[String]): IO[ExitCode] =
-    val port = args.headOption
-      .flatMap(head => scala.util.Try(head.toInt).toOption)
-      .flatMap(Port.fromInt).getOrElse(Port.fromInt(8080).get)
+    val (host, port) = (for {
+      host <- configReader.map(_.host)
+      maybePort <- configReader.map(_.port)
+      port =  maybePort.getOrElse(Port.fromInt(8080).get)
+    } yield (host, port)).run(args)
 
     EmberServerBuilder
       .default[IO]
-      .withHost(ipv4"0.0.0.0")
+      .withHost(host)
       .withPort(port)
       .withHttpApp(allRoutesComplete)
       .build
