@@ -1,7 +1,7 @@
 package eu.karnicki.fun
 
 import cats.*
-import cats.data.Reader
+import cats.data.{Reader, Writer}
 import cats.effect.{ExitCode, IO, IOApp}
 import cats.implicits.*
 import com.comcast.ip4s.{Ipv4Address, Port, ipv4, port}
@@ -43,16 +43,28 @@ object CounterpartyServiceApp extends IOApp:
     val dsl = Http4sDsl[F]
     import dsl.*
 
-    HttpRoutes.of[F] {
-      case GET -> Root / "deanonymize" / counterpartyHash =>
-        Thread.sleep(1000)
-        counterpartyStore.get(counterpartyHash) match
-          case Some(counterpartyId) if counterpartyId.isBlank =>
-            BadRequest(counterpartyHash)
-          case Some(counterpartyId) =>
-            Ok(counterpartyId)
-          case None =>
-            NotFound(counterpartyHash)
+    HttpRoutes.of[F] { request =>
+      val counterpartyWriter: Writer[List[String], F[Response[F]]] =
+        Writer(List.empty[String], request)
+          .mapBoth((audit, req) => req match
+            case GET -> Root / "deanonymize" / counterpartyHash =>
+              (s"user xyz requested a query to the datastore for counterpartyHash $counterpartyHash" :: audit, {
+                Thread.sleep(1000)
+                counterpartyHash -> counterpartyStore.get(counterpartyHash)
+              }))
+          .mapBoth {
+            case (audit, (counterpartyHash, maybeCounterpartyId)) =>
+              maybeCounterpartyId match
+                case Some(counterpartyId) if counterpartyId.isBlank =>
+                  (s"the requested counterparty $counterpartyId was blank" +: audit, BadRequest(counterpartyId))
+                case Some(counterpartyId) =>
+                  (s"found counterpartyId $counterpartyId for counterpartyHash $counterpartyHash" :: audit, Ok(counterpartyId))
+                case None =>
+                  (s"requested counterparty for counterpartyHash $counterpartyHash not found" :: audit, NotFound(counterpartyHash))
+          }
+      val (audit, response) = counterpartyWriter.run
+      audit.reverse.foreach(s => println(s"[AUDIT]: $s"))
+      response
     }
 
   def allRoutes[F[_] : Monad]: HttpRoutes[F] =
@@ -76,7 +88,7 @@ object CounterpartyServiceApp extends IOApp:
     val (host, port) = (for {
       host <- configReader.map(_.host)
       maybePort <- configReader.map(_.port)
-      port =  maybePort.getOrElse(Port.fromInt(8080).get)
+      port = maybePort.getOrElse(Port.fromInt(8080).get)
     } yield (host, port)).run(args)
 
     EmberServerBuilder
