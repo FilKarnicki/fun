@@ -44,26 +44,25 @@ object CounterpartyServiceApp extends IOApp:
     import dsl.*
 
     HttpRoutes.of[F] { request =>
-      val counterpartyWriter: Writer[List[String], F[Response[F]]] =
-        Writer(List.empty[String], request)
-          .mapBoth((audit, req) => req match
-            case GET -> Root / "deanonymize" / counterpartyHash =>
-              (s"user xyz requested a query to the datastore for counterpartyHash $counterpartyHash" :: audit, {
-                Thread.sleep(1000)
-                counterpartyHash -> counterpartyStore.get(counterpartyHash)
-              }))
-          .mapBoth {
-            case (audit, (counterpartyHash, maybeCounterpartyId)) =>
-              maybeCounterpartyId match
-                case Some(counterpartyId) if counterpartyId.isBlank =>
-                  (s"the requested counterparty $counterpartyId was blank" +: audit, BadRequest(counterpartyId))
-                case Some(counterpartyId) =>
-                  (s"found counterpartyId $counterpartyId for counterpartyHash $counterpartyHash" :: audit, Ok(counterpartyId))
-                case None =>
-                  (s"requested counterparty for counterpartyHash $counterpartyHash not found" :: audit, NotFound(counterpartyHash))
-          }
+      val counterpartyWriter: Writer[List[String], F[Response[F]]] = for {
+        counterpartyInfo <- request match
+          case GET -> Root / "deanonymize" / counterpartyHash =>
+            Writer(List(s"user xyz requested a query to the datastore for counterpartyHash $counterpartyHash"), {
+              Thread.sleep(1000)
+              counterpartyHash -> counterpartyStore.get(counterpartyHash)
+            })
+        (counterpartyHash, counterpartyId) = counterpartyInfo
+        response <- counterpartyId match
+          case Some(counterpartyId) if counterpartyId.isBlank =>
+            Writer(List(s"the requested counterparty $counterpartyId was blank"), BadRequest(counterpartyId))
+          case Some(counterpartyId) =>
+            Writer(List(s"found counterpartyId $counterpartyId for counterpartyHash $counterpartyHash"), Ok(counterpartyId))
+          case None =>
+            Writer(List(s"requested counterparty for counterpartyHash $counterpartyHash not found"), NotFound(counterpartyHash))
+      } yield response
+
       val (audit, response) = counterpartyWriter.run
-      audit.reverse.foreach(s => println(s"[AUDIT]: $s"))
+      audit.foreach(s => println(s"[AUDIT]: $s"))
       response
     }
 
